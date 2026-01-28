@@ -1,0 +1,133 @@
+{
+  "users": {
+    "540915499698225162": {
+      "camp": "sloth",
+      "points": 1006,
+      "wins": 1,
+      "losses": 1,
+      "username": "jesuiskoriel"
+    },
+    "1003665406667522098": {
+      "camp": "pride",
+      "points": 1016,
+      "wins": 1,
+      "losses": 0,
+      "username": "cereza9807"
+    },
+    "660570578062671893": {
+      "camp": "gluttony",
+      "points": 978,
+      "wins": 0,
+      "losses": 1,
+      "username": "la_valise"
+    }
+  },
+  "queue": [],
+  "matches": {
+    "1466070558553669915": {
+      "players": [
+        "540915499698225162",
+        "1003665406667522098"
+      ],
+      "reports": {
+        "540915499698225162": {
+          "winnerId": "1003665406667522098",
+          "bo": "bo3"
+        },
+        "1003665406667522098": {
+          "winnerId": "1003665406667522098",
+          "bo": "bo3"
+        }
+      },
+      "cancel": {},
+      "status": "closed",
+      "boVotes": {
+        "1003665406667522098": "bo3",
+        "540915499698225162": "bo3"
+      },
+      "boCooldown": {
+        "1003665406667522098": 1769608865489,
+        "540915499698225162": 1769608872223
+      },
+      "gentlemanVotes": {},
+      "bo": "bo3",
+      "reportPosted": true,
+      "stageState": {
+        "phase": "done",
+        "rps": {
+          "540915499698225162": "paper",
+          "1003665406667522098": "rock"
+        },
+        "rpsWinner": "540915499698225162",
+        "rpsLoser": "1003665406667522098",
+        "remaining": [
+          "Battlefield",
+          "Kalos Pokemon League"
+        ],
+        "banNeed": 4,
+        "banSelected": [
+          "Final Destination",
+          "Town and City",
+          "Hollow Bastion",
+          "Small Battlefield"
+        ],
+        "stageIdMap": {},
+        "loserPicks": []
+      }
+    },
+    "1466076823778754778": {
+      "players": [
+        "660570578062671893",
+        "540915499698225162"
+      ],
+      "reports": {
+        "660570578062671893": {
+          "winnerId": "540915499698225162",
+          "bo": "bo5"
+        },
+        "540915499698225162": {
+          "winnerId": "540915499698225162",
+          "bo": "bo5"
+        }
+      },
+      "cancel": {},
+      "status": "closed",
+      "boVotes": {
+        "660570578062671893": "bo3",
+        "540915499698225162": "bo3"
+      },
+      "boCooldown": {
+        "660570578062671893": 1769610362038,
+        "540915499698225162": 1769610369644
+      },
+      "gentlemanVotes": {},
+      "bo": "bo3",
+      "reportPosted": true,
+      "stageState": {
+        "phase": "done",
+        "rps": {
+          "540915499698225162": "rock",
+          "660570578062671893": "paper"
+        },
+        "rpsWinner": "660570578062671893",
+        "rpsLoser": "540915499698225162",
+        "remaining": [
+          "Battlefield",
+          "Yoshi's Story"
+        ],
+        "banNeed": 4,
+        "banSelected": [
+          "Hollow Bastion",
+          "Pokemon Stadium 2",
+          "Small Battlefield",
+          "Smashville"
+        ],
+        "stageIdMap": {
+          "battlefield": "Battlefield",
+          "yoshi_s_story": "Yoshi's Story"
+        },
+        "picked": "Yoshi's Story"
+      }
+    }
+  }
+}

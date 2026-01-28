@@ -1,0 +1,14 @@
+{
+  "name": "hellladder-bot",
+  "version": "0.1.0",
+  "description": "Discord ladder bot for SSBU",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  }
+}
