@@ -780,7 +780,13 @@ client.on('messageCreate', async (message) => {
       .sort((a, b) => b[1].points - a[1].points)
       .slice(0, 10);
 
-    const lines = top.map(([userId, stats], idx) => `${idx + 1}. ${formatUserLine(userId, stats)}`);
+    const lines = top.map(([userId, stats], idx) => {
+      if (message.guild.id === MAIN_GUILD_ID) {
+        return `${idx + 1}. ${formatUserLine(userId, stats)}`;
+      }
+      const name = stats.username || userId;
+      return `${idx + 1}. ${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L)`;
+    });
     await message.channel.send(['**Top 10**', ...lines].join('\n'));
     return;
   }
@@ -797,8 +803,9 @@ client.on('messageCreate', async (message) => {
     const rank = idx >= 0 ? idx + 1 : sorted.length + 1;
     const user = getUser(message.author.id);
     const name = user.username || message.author.username;
+    const camp = message.guild.id === MAIN_GUILD_ID ? ` [${formatSinLabel(user.camp)}]` : '';
     await message.channel.send(
-      `**${name}** — Rang global: **#${rank}** sur **${sorted.length}** joueurs (${user.points} pts).`
+      `**${name}**${camp} — Rang global: **#${rank}** sur **${sorted.length}** joueurs (${user.points} pts).`
     );
     return;
   }
@@ -868,6 +875,7 @@ client.on('messageCreate', async (message) => {
     }
     const user = getUser(message.author.id);
     user.username = message.author.username;
+    getGuildUser(message.guild.id, message.author.id);
     saveData();
     await message.channel.send({
       content: `Équipe **${formatSinLabel(sin)}** définie pour <@${message.author.id}>. Clique pour trouver un match :`,
@@ -948,6 +956,7 @@ client.on('messageCreate', async (message) => {
     if (!isLadderChannel) return;
     const user = getUser(message.author.id);
     user.username = message.author.username;
+    getGuildUser(message.guild.id, message.author.id);
     saveData();
     if (message.guild.id === MAIN_GUILD_ID && !user.camp) {
       await message.channel.send('Choisis d’abord une équipe avec `!team <sin>`');
@@ -1310,6 +1319,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       const user = getUser(interaction.user.id);
       user.username = interaction.user.username;
+      getGuildUser(interaction.guild.id, interaction.user.id);
       saveData();
       if (interaction.guild.id === MAIN_GUILD_ID && !user.camp) {
         await interaction.editReply({ content: 'Choisis d’abord une équipe avec `!team` ou le menu.' });
