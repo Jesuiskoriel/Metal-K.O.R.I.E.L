@@ -5,13 +5,12 @@
 Salut 👋  
 Je suis **Metal K.O.R.I.E.L**, le gardien du HellLadder.  
 Je suis là pour organiser tes matchs, gérer ton Elo et m’assurer que tout se passe clean 🔥  
-Ce guide est pour les joueurs (pas besoin des commandes admin/modo).
+Ce guide est pour les joueurs
 
 ━━━━━━━━━━━━━━━━━━━━
 **⚙️ COMMANDES UTILES (JOUEURS)**
 ━━━━━━━━━━━━━━━━━━━━
 
-• `!team <nom>` → choisir ton équipe (uniquement serveur principal)  
 • `!ladder` → panneau avec **Matchmaking serveur** / **global**  
 • `!ranking` → top 10 global (avatar du #1)  
 • `!servranking` → top 10 du serveur  
@@ -19,13 +18,7 @@ Ce guide est pour les joueurs (pas besoin des commandes admin/modo).
 • `!lr` / `!localrank` → ton rang serveur  
 • `!leave` → quitter la file (local ou globale)  
 • `!gentleman bo3` / `!gentleman bo5` → proposer un gentleman (accord des 2 joueurs)  
-• `!char <nom>` → rechercher un perso (si tu ne veux pas scroller)
 
-━━━━━━━━━━━━━━━━━━━━
-**🩸 ÉQUIPES DISPONIBLES**
-━━━━━━━━━━━━━━━━━━━━
-
-Pride, Greed, Lust, Envy, Gluttony, Wrath, Sloth
 
 ━━━━━━━━━━━━━━━━━━━━
 **▶️ DÉMARRER UN MATCH**
