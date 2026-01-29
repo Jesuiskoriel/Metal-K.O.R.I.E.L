@@ -9,7 +9,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder
+  StringSelectMenuBuilder,
+  EmbedBuilder
 } = require('discord.js');
 
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -240,6 +241,15 @@ function formatUserLine(userId, stats) {
   const campLabel = stats.camp ? formatSinLabel(stats.camp) : 'Sans équipe';
   const name = stats.username || userId;
   return `${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L) [${campLabel}]`;
+}
+
+function buildTopEmbed(title, lines, top1AvatarUrl) {
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(lines.join('\n'))
+    .setColor(0xe74c3c);
+  if (top1AvatarUrl) embed.setThumbnail(top1AvatarUrl);
+  return embed;
 }
 
 function csvEscape(value) {
@@ -787,7 +797,14 @@ client.on('messageCreate', async (message) => {
       const name = stats.username || userId;
       return `${idx + 1}. ${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L)`;
     });
-    await message.channel.send(['**Top 10**', ...lines].join('\n'));
+    let top1AvatarUrl = null;
+    try {
+      const top1Id = top[0][0];
+      const user = await client.users.fetch(top1Id);
+      top1AvatarUrl = user.displayAvatarURL({ size: 128 });
+    } catch {}
+    const embed = buildTopEmbed('Top 10 (Global)', lines, top1AvatarUrl);
+    await message.channel.send({ embeds: [embed] });
     return;
   }
 
@@ -812,6 +829,7 @@ client.on('messageCreate', async (message) => {
 
   if (cmd === '!lr' || cmd === '!localrank') {
     if (!isLadderChannel) return;
+    getGuildUser(message.guild.id, message.author.id);
     const guild = data.guilds[message.guild.id];
     const entries = guild ? Object.entries(guild.users || {}) : [];
     if (entries.length === 0) {
@@ -832,6 +850,7 @@ client.on('messageCreate', async (message) => {
 
   if (cmd === '!servranking') {
     if (!isLadderChannel) return;
+    getGuildUser(message.guild.id, message.author.id);
     const guild = data.guilds[message.guild.id];
     const entries = guild ? Object.entries(guild.users || {}) : [];
     if (entries.length === 0) {
@@ -846,7 +865,14 @@ client.on('messageCreate', async (message) => {
       const name = data.users[userId]?.username || userId;
       return `${idx + 1}. ${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L)`;
     });
-    await message.channel.send(['**Top 10 (Serveur)**', ...lines].join('\n'));
+    let top1AvatarUrl = null;
+    try {
+      const top1Id = top[0][0];
+      const user = await client.users.fetch(top1Id);
+      top1AvatarUrl = user.displayAvatarURL({ size: 128 });
+    } catch {}
+    const embed = buildTopEmbed('Top 10 (Serveur)', lines, top1AvatarUrl);
+    await message.channel.send({ embeds: [embed] });
     return;
   }
 
