@@ -375,6 +375,19 @@ function buildFindRow() {
   );
 }
 
+function buildTeamSelectRow() {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('team_select')
+    .setPlaceholder('Choisis ton équipe')
+    .addOptions(
+      SINS.map((sin) => ({
+        label: formatSinLabel(sin),
+        value: sin
+      }))
+    );
+  return new ActionRowBuilder().addComponents(select);
+}
+
 function buildReportMenu(playerA, playerB) {
   const reportSelect = new StringSelectMenuBuilder()
     .setCustomId('report_select')
@@ -833,6 +846,13 @@ client.on('messageCreate', async (message) => {
       return;
     }
     const sin = (args[0] || '').toLowerCase();
+    if (!sin) {
+      await message.channel.send({
+        content: 'Choisis ton équipe :',
+        components: [buildTeamSelectRow()]
+      });
+      return;
+    }
     if (!SINS.includes(sin)) {
       await message.channel.send(`Choisis une équipe valide : ${SINS.map(formatSinLabel).join(', ')}`);
       return;
@@ -1107,6 +1127,28 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.customId === 'camp_select') {
       await interaction.reply({
         content: 'Choix d’équipe désactivé ici. Utilise `!team <nom>`.',
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (interaction.customId === 'team_select') {
+      if (interaction.guild.id !== MAIN_GUILD_ID) {
+        await interaction.reply({ content: 'Les équipes sont uniquement actives sur le serveur principal.', ephemeral: true });
+        return;
+      }
+      const sin = interaction.values[0];
+      const res = await setUserCampAndRole(interaction.member, sin);
+      if (!res.ok) {
+        await interaction.reply({ content: res.error, ephemeral: true });
+        return;
+      }
+      const user = getUser(interaction.user.id);
+      user.username = interaction.user.username;
+      saveData();
+      await interaction.reply({
+        content: `Équipe **${formatSinLabel(sin)}** définie. Clique pour trouver un match :`,
+        components: [buildFindRow()],
         ephemeral: true
       });
       return;
