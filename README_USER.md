@@ -8,14 +8,18 @@ Je suis là pour organiser tes matchs, gérer ton Elo et m’assurer que tout se
 Ce guide est pour les joueurs (pas besoin des commandes admin/modo).
 
 ━━━━━━━━━━━━━━━━━━━━
-**⚙️ COMMANDES UTILES**
+**⚙️ COMMANDES UTILES (JOUEURS)**
 ━━━━━━━━━━━━━━━━━━━━
 
-• `!team <nom>` → choisir ton équipe (obligatoire)  
-• `!ladder` → afficher les règles + bouton pour chercher un match  
-• `!ranking` → voir le classement global  
-• `!servranking` → voir le classement du serveur  
-• `!gentleman bo3` / `!gentleman bo5` → proposer un gentleman (accord des 2 joueurs)
+• `!team <nom>` → choisir ton équipe (uniquement serveur principal)  
+• `!ladder` → panneau avec **Matchmaking serveur** / **global**  
+• `!ranking` → top 10 global (avatar du #1)  
+• `!servranking` → top 10 du serveur  
+• `!pr` / `!personalrank` → ton rang global  
+• `!lr` / `!localrank` → ton rang serveur  
+• `!leave` → quitter la file (local ou globale)  
+• `!gentleman bo3` / `!gentleman bo5` → proposer un gentleman (accord des 2 joueurs)  
+• `!char <nom>` → rechercher un perso (si tu ne veux pas scroller)
 
 ━━━━━━━━━━━━━━━━━━━━
 **🩸 ÉQUIPES DISPONIBLES**
@@ -32,6 +36,11 @@ Pride, Greed, Lust, Envy, Gluttony, Wrath, Sloth
    - **Matchmaking serveur** → match local sur ce serveur  
    - **Matchmaking global** → match dans le serveur hub (tu reçois un DM avec le lien)  
 3) Je crée un salon privé pour votre match.
+
+**Matchmaking global (hub)**
+- Si tu n’es pas dans le hub, je t’envoie une **invitation en DM**.  
+- Dès que tu rejoins le hub, je crée le salon si un adversaire est dispo.  
+- Si un joueur est global et l’autre local **sur le même serveur**, je crée le match local.
 
 ━━━━━━━━━━━━━━━━━━━━
 **🎮 CHOIX DU FORMAT (BO)**
@@ -54,19 +63,25 @@ Simple. Rapide. Sans discussion.
 **🗺️ SÉLECTION DE STAGE (RPS)**
 ━━━━━━━━━━━━━━━━━━━━
 
-• Pierre / Feuille / Ciseaux  
+• **Game 1** : Pierre / Feuille / Ciseaux  
 • Gagnant : ban **3** stages  
 • Perdant : ban **4** stages  
 • Gagnant : choisit le stage final parmi les **2** restants  
-• Bouton **Random map** dispo si vous voulez laisser le destin décider
+• Bouton **Random map** dispo si vous voulez laisser le destin décider  
+• **Après chaque game** : perdant ban 4 → gagnant pick direct
+
+**🎮 SÉLECTION DE PERSONNAGE**
+Avant les bans, **les 2 joueurs choisissent leur perso** (menu par pages).  
+Après chaque game, on re‑choisit le perso.
 
 ━━━━━━━━━━━━━━━━━━━━
 **📝 REPORT DU RÉSULTAT**
 ━━━━━━━━━━━━━━━━━━━━
 
-Vous devez tous les deux reporter le même gagnant et le même BO.  
-Si ça correspond, je mets à jour l’Elo automatiquement.  
-Pas de triche. Pas d’oubli.
+• Chaque **game** doit être reportée par **les 2 joueurs**.  
+• Le set se termine automatiquement quand un joueur atteint 2 (BO3) ou 3 (BO5).  
+• L’Elo est mis à jour automatiquement à la fin du set.  
+• J’affiche aussi les **points gagnés/perdus**.
 
 ━━━━━━━━━━━━━━━━━━━━
 **📊 ELO (EN BREF)**
