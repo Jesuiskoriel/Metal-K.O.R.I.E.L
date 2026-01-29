@@ -37,6 +37,90 @@ const STAGES = [
   'Final Destination',
   "Yoshi's Story"
 ];
+const FIGHTERS = [
+  'Mario',
+  'Donkey Kong',
+  'Link',
+  'Samus',
+  'Dark Samus',
+  'Yoshi',
+  'Kirby',
+  'Fox',
+  'Pikachu',
+  'Luigi',
+  'Ness',
+  'Captain Falcon',
+  'Jigglypuff',
+  'Peach',
+  'Daisy',
+  'Bowser',
+  'Ice Climbers',
+  'Sheik',
+  'Zelda',
+  'Dr. Mario',
+  'Pichu',
+  'Falco',
+  'Marth',
+  'Lucina',
+  'Young Link',
+  'Ganondorf',
+  'Mewtwo',
+  'Roy',
+  'Chrom',
+  'Mr. Game & Watch',
+  'Meta Knight',
+  'Pit',
+  'Dark Pit',
+  'Zero Suit Samus',
+  'Wario',
+  'Snake',
+  'Ike',
+  'Pokémon Trainer',
+  'Diddy Kong',
+  'Lucas',
+  'Sonic',
+  'King Dedede',
+  'Olimar',
+  'Lucario',
+  'R.O.B.',
+  'Toon Link',
+  'Wolf',
+  'Villager',
+  'Mega Man',
+  'Wii Fit Trainer',
+  'Rosalina & Luma',
+  'Little Mac',
+  'Greninja',
+  'Mii Brawler',
+  'Mii Swordfighter',
+  'Mii Gunner',
+  'Palutena',
+  'Pac-Man',
+  'Robin',
+  'Shulk',
+  'Bowser Jr.',
+  'Duck Hunt',
+  'Ryu',
+  'Ken',
+  'Cloud',
+  'Corrin',
+  'Bayonetta',
+  'Inkling',
+  'Ridley',
+  'Simon',
+  'Richter',
+  'King K. Rool',
+  'Isabelle',
+  'Incineroar',
+  'Piranha Plant',
+  'Joker',
+  'Hero',
+  'Banjo & Kazooie',
+  'Terry',
+  'Byleth',
+  'Min Min',
+  'Steve'
+];
 
 const LADDER_RULES = [
   '**Règles ladder (MVP)**',
@@ -385,6 +469,21 @@ function buildRpsRow() {
   );
 }
 
+function buildCharacterSelectRows() {
+  const rows = [];
+  const pageSize = 25;
+  const pages = Math.ceil(FIGHTERS.length / pageSize);
+  for (let i = 0; i < pages; i += 1) {
+    const slice = FIGHTERS.slice(i * pageSize, (i + 1) * pageSize);
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`char_page_${i + 1}`)
+      .setPlaceholder(`Choisis ton perso (page ${i + 1}/${pages})`)
+      .addOptions(slice.map((name) => ({ label: name, value: name })));
+    rows.push(new ActionRowBuilder().addComponents(select));
+  }
+  return rows;
+}
+
 async function postBoChoiceStart(channel, match) {
   match.boVotes = {};
   match.boCooldown = {};
@@ -414,6 +513,21 @@ async function postStageFlowStart(channel, match) {
   await channel.send({
     content: `RPS : <@${match.players[0]}> <@${match.players[1]}> choisissez Pierre/Feuille/Ciseaux.`,
     components: [buildRpsRow()]
+  });
+}
+
+async function promptCharacterSelect(channel, match, pending, payload = {}) {
+  initSet(match);
+  match.charSelect = {
+    game: match.set.game,
+    pending,
+    payload,
+    selections: {}
+  };
+  saveData();
+  await channel.send({
+    content: `Sélection des personnages (game ${match.set.game}). Les 2 joueurs doivent choisir.`,
+    components: buildCharacterSelectRows()
   });
 }
 
@@ -738,6 +852,74 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
+  if (cmd === '!char') {
+    if (!isMatchChannel) return;
+    if (!match.charSelect) {
+      await message.channel.send('Aucune sélection de personnage en cours.');
+      return;
+    }
+    if (!match.players.includes(message.author.id)) {
+      await message.channel.send('Seuls les joueurs du match peuvent choisir.');
+      return;
+    }
+    const query = args.join(' ').trim().toLowerCase();
+    if (!query) {
+      await message.channel.send('Usage : `!char <nom>`');
+      return;
+    }
+    const hits = FIGHTERS.filter((f) => f.toLowerCase().includes(query));
+    if (hits.length === 0) {
+      await message.channel.send('Aucun perso trouvé.');
+      return;
+    }
+    if (hits.length > 10) {
+      await message.channel.send(`Trop de résultats (${hits.length}). Sois plus précis.`);
+      return;
+    }
+    if (hits.length > 1) {
+      await message.channel.send(`Résultats : ${hits.join(', ')}`);
+      return;
+    }
+    const pick = hits[0];
+    match.charSelect.selections[message.author.id] = pick;
+    saveData();
+    await message.channel.send(`Perso choisi : **${pick}**.`);
+    const [a, b] = match.players;
+    if (match.charSelect.selections[a] && match.charSelect.selections[b]) {
+      await message.channel.send(
+        `Personnages confirmés : <@${a}> **${match.charSelect.selections[a]}** / <@${b}> **${match.charSelect.selections[b]}**`
+      );
+      const pending = match.charSelect.pending;
+      const payload = match.charSelect.payload || {};
+      match.charSelect = null;
+      saveData();
+      if (pending === 'rps') {
+        await postStageFlowStart(message.channel, match);
+      } else if (pending === 'gentle') {
+        await promptGentlemanPick(message.channel, match);
+        await promptGameReport(message.channel, match);
+      } else if (pending === 'postgame') {
+        match.stageState = {
+          phase: 'postgame_ban4',
+          rpsWinner: payload.winnerId,
+          rpsLoser: payload.loserId,
+          remaining: [...STAGES],
+          banNeed: 0,
+          banSelected: [],
+          stageIdMap: {},
+          pickWinner: payload.winnerId,
+          banPlayer: payload.loserId
+        };
+        saveData();
+        await message.channel.send(
+          `Nouvelle game : <@${payload.loserId}> ban 4 stages, puis <@${payload.winnerId}> choisit le stage.`
+        );
+        await promptBan(message.channel, match, payload.loserId, 4);
+      }
+    }
+    return;
+  }
+
   if (cmd === '!find') {
     if (!isLadderChannel) return;
     const user = getUser(message.author.id);
@@ -905,7 +1087,7 @@ client.on('messageCreate', async (message) => {
       initSet(match);
       await message.channel.send(`Gentleman accepté : format **${match.bo.toUpperCase()}**.`);
       await postReportControls(message.channel, match);
-      await promptGentlemanPick(message.channel, match);
+      await promptCharacterSelect(message.channel, match, 'gentle');
       return;
     }
     await message.channel.send('Gentleman proposé. En attente de l’autre joueur.');
@@ -965,6 +1147,56 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    if (interaction.customId.startsWith('char_page_')) {
+      if (!isMatchChannel) return;
+      if (!match.charSelect) {
+        await interaction.reply({ content: 'Aucune sélection de personnage en cours.', ephemeral: true });
+        return;
+      }
+      if (!match.players.includes(interaction.user.id)) {
+        await interaction.reply({ content: 'Seuls les joueurs du match peuvent choisir.', ephemeral: true });
+        return;
+      }
+      const pick = interaction.values[0];
+      match.charSelect.selections[interaction.user.id] = pick;
+      saveData();
+      await interaction.reply({ content: `Perso choisi : **${pick}**`, ephemeral: true });
+      const [a, b] = match.players;
+      if (match.charSelect.selections[a] && match.charSelect.selections[b]) {
+        await interaction.channel.send(
+          `Personnages confirmés : <@${a}> **${match.charSelect.selections[a]}** / <@${b}> **${match.charSelect.selections[b]}**`
+        );
+        const pending = match.charSelect.pending;
+        const payload = match.charSelect.payload || {};
+        match.charSelect = null;
+        saveData();
+        if (pending === 'rps') {
+          await postStageFlowStart(interaction.channel, match);
+        } else if (pending === 'gentle') {
+          await promptGentlemanPick(interaction.channel, match);
+          await promptGameReport(interaction.channel, match);
+        } else if (pending === 'postgame') {
+          match.stageState = {
+            phase: 'postgame_ban4',
+            rpsWinner: payload.winnerId,
+            rpsLoser: payload.loserId,
+            remaining: [...STAGES],
+            banNeed: 0,
+            banSelected: [],
+            stageIdMap: {},
+            pickWinner: payload.winnerId,
+            banPlayer: payload.loserId
+          };
+          saveData();
+          await interaction.channel.send(
+            `Nouvelle game : <@${payload.loserId}> ban 4 stages, puis <@${payload.winnerId}> choisit le stage.`
+          );
+          await promptBan(interaction.channel, match, payload.loserId, 4);
+        }
+      }
+      return;
+    }
+
     if (interaction.customId === 'game_report') {
       if (!isMatchChannel) return;
       if (match.status !== 'open') {
@@ -1013,22 +1245,10 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      match.stageState = {
-        phase: 'postgame_ban4',
-        rpsWinner: r1,
-        rpsLoser: loserId,
-        remaining: [...STAGES],
-        banNeed: 0,
-        banSelected: [],
-        stageIdMap: {},
-        pickWinner: r1,
-        banPlayer: loserId
-      };
-      saveData();
-      await interaction.channel.send(
-        `Nouvelle game : <@${loserId}> ban 4 stages, puis <@${r1}> choisit le stage.`
-      );
-      await promptBan(interaction.channel, match, loserId, 4);
+      await promptCharacterSelect(interaction.channel, match, 'postgame', {
+        winnerId: r1,
+        loserId
+      });
       await interaction.reply({ content: 'Prochaine game lancée.', ephemeral: true });
       return;
     }
@@ -1148,7 +1368,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.channel.send('Gentleman accepté : pas de bans, choix direct du stage.');
         initSet(match);
         await postReportControls(interaction.channel, match);
-        await promptGentlemanPick(interaction.channel, match);
+        await promptCharacterSelect(interaction.channel, match, 'gentle');
         await interaction.reply({ content: 'Gentleman confirmé.', ephemeral: true });
         return;
       }
@@ -1195,7 +1415,7 @@ client.on('interactionCreate', async (interaction) => {
         if (!match.stageState || match.stageState.phase === 'rps') {
           match.stageState = null;
           saveData();
-          await postStageFlowStart(interaction.channel, match);
+          await promptCharacterSelect(interaction.channel, match, 'rps');
         }
         await interaction.reply({ content: 'Format confirmé.', ephemeral: true });
         return;
