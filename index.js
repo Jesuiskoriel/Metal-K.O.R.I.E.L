@@ -145,7 +145,7 @@ const LADDER_RULES = [
 
 function loadData() {
   if (!fs.existsSync(DATA_PATH)) {
-    return { users: {}, guilds: {}, queues: {}, matches: {}, globalQueue: [] };
+    return { users: {}, guilds: {}, queues: {}, matches: {}, globalQueue: [], globalQueueMeta: {} };
   }
   try {
     const raw = fs.readFileSync(DATA_PATH, 'utf8');
@@ -159,10 +159,11 @@ function loadData() {
       guilds: data.guilds || {},
       queues,
       matches: data.matches || {},
-      globalQueue: Array.isArray(data.globalQueue) ? data.globalQueue : []
+      globalQueue: Array.isArray(data.globalQueue) ? data.globalQueue : [],
+      globalQueueMeta: data.globalQueueMeta || {}
     };
   } catch {
-    return { users: {}, guilds: {}, queues: {}, matches: {}, globalQueue: [] };
+    return { users: {}, guilds: {}, queues: {}, matches: {}, globalQueue: [], globalQueueMeta: {} };
   }
 }
 
@@ -204,6 +205,15 @@ function getGlobalQueue() {
   return data.globalQueue;
 }
 
+function setGlobalQueueMeta(userId, guildId) {
+  if (!data.globalQueueMeta) data.globalQueueMeta = {};
+  data.globalQueueMeta[userId] = guildId;
+}
+
+function getGlobalQueueMeta(userId) {
+  return data.globalQueueMeta ? data.globalQueueMeta[userId] : null;
+}
+
 async function getTeamLabelIfInMain(userId) {
   const user = data.users[userId];
   if (!user || !user.camp) return null;
@@ -226,9 +236,8 @@ async function buildMatchLine(aId, bId, labelPrefix = 'Match') {
 
 async function tryGlobalMatch() {
   const hubGuild = await client.guilds.fetch(HUB_GUILD_ID).catch(() => null);
-  if (!hubGuild) return;
   const gq = getGlobalQueue();
-  if (gq.length < 2) return;
+  if (gq.length === 0) return;
 
   // Clean queue from users already in matches
   const open = new Set(
@@ -241,7 +250,44 @@ async function tryGlobalMatch() {
     data.globalQueue = cleaned;
     saveData();
   }
-  if (data.globalQueue.length < 2) return;
+  if (data.globalQueue.length === 0) return;
+
+  // If a global-queued player can match with a local-queued player in the same guild, create local match
+  for (const gId of data.globalQueue) {
+    const guildId = getGlobalQueueMeta(gId);
+    if (!guildId) continue;
+    const queue = getQueue(guildId);
+    const opponentId = queue.find((id) => id !== gId);
+    if (!opponentId) continue;
+
+    // Remove both from queues
+    data.globalQueue = data.globalQueue.filter((id) => id !== gId);
+    data.queues[guildId] = queue.filter((id) => id !== opponentId);
+    delete data.globalQueueMeta[gId];
+    saveData();
+
+    const guild = await client.guilds.fetch(guildId).catch(() => null);
+    if (!guild) break;
+    const memberA = await guild.members.fetch(gId).catch(() => null);
+    const memberB = await guild.members.fetch(opponentId).catch(() => null);
+    if (!memberA || !memberB) break;
+
+    const channel = await createMatchChannel(guild, memberA, memberB);
+    data.matches[channel.id] = {
+      players: [gId, opponentId],
+      reports: {},
+      cancel: {},
+      status: 'open'
+    };
+    saveData();
+
+    await channel.send(await buildMatchLine(gId, opponentId, 'Match'));
+    await channel.send(LADDER_RULES);
+    await postBoChoiceStart(channel, data.matches[channel.id]);
+    return;
+  }
+
+  if (!hubGuild || data.globalQueue.length < 2) return;
 
   // Find two users that are in the hub
   let a = null;
@@ -263,6 +309,8 @@ async function tryGlobalMatch() {
 
   // Remove them from global queue
   data.globalQueue = data.globalQueue.filter((id) => id !== a && id !== b);
+  delete data.globalQueueMeta[a];
+  delete data.globalQueueMeta[b];
   saveData();
 
   const memberA = await hubGuild.members.fetch(a);
@@ -1168,6 +1216,7 @@ client.on('messageCreate', async (message) => {
     }
     data.queues[message.guild.id] = queue.filter((id) => id !== message.author.id);
     data.globalQueue = gq.filter((id) => id !== message.author.id);
+    if (data.globalQueueMeta) delete data.globalQueueMeta[message.author.id];
     saveData();
     await message.channel.send('Tu as quitté la file.');
     return;
@@ -1549,6 +1598,7 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       gq.push(interaction.user.id);
+      setGlobalQueueMeta(interaction.user.id, interaction.guild.id);
       saveData();
 
       const hubGuild = await client.guilds.fetch(HUB_GUILD_ID).catch(() => null);
@@ -1586,6 +1636,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       data.queues[interaction.guild.id] = queue.filter((id) => id !== interaction.user.id);
       data.globalQueue = gq.filter((id) => id !== interaction.user.id);
+      if (data.globalQueueMeta) delete data.globalQueueMeta[interaction.user.id];
       saveData();
       await interaction.reply({ content: 'Tu as quitté la file.', ephemeral: true });
     }
