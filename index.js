@@ -240,7 +240,9 @@ async function createMatchChannel(guild, playerA, playerB) {
 function formatUserLine(userId, stats) {
   const campLabel = stats.camp ? formatSinLabel(stats.camp) : 'Sans équipe';
   const name = stats.username || userId;
-  return `${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L) [${campLabel}]`;
+  const total = (stats.wins || 0) + (stats.losses || 0);
+  const wr = total > 0 ? Math.round((stats.wins / total) * 100) : 0;
+  return `${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L, ${wr}%) [${campLabel}]`;
 }
 
 function buildTopEmbed(title, lines, top1AvatarUrl) {
@@ -661,12 +663,16 @@ async function finalizeMatch(channel, match, winnerId, bo) {
   const winner = getUser(winnerId);
   const loser = getUser(loserId);
 
+  const winnerBefore = winner.points;
+  const loserBefore = loser.points;
   applyElo(winner, loser, bo);
   winner.wins += 1;
   loser.losses += 1;
 
   const guildWinner = getGuildUser(channel.guild.id, winnerId);
   const guildLoser = getGuildUser(channel.guild.id, loserId);
+  const guildWinnerBefore = guildWinner.points;
+  const guildLoserBefore = guildLoser.points;
   applyElo(guildWinner, guildLoser, bo);
   guildWinner.wins += 1;
   guildLoser.losses += 1;
@@ -674,8 +680,11 @@ async function finalizeMatch(channel, match, winnerId, bo) {
   match.status = 'closed';
   saveData();
 
+  const winnerDelta = winner.points - winnerBefore;
+  const loserDelta = loser.points - loserBefore;
   await channel.send(
-    `Résultat confirmé (${bo}). Gagnant: <@${winnerId}> (Elo ${winner.points}). Perdant: <@${loserId}> (Elo ${loser.points}).`
+    `Résultat confirmé (${bo}). Gagnant: <@${winnerId}> (Elo ${winner.points}, ${winnerDelta >= 0 ? '+' : ''}${winnerDelta}). ` +
+    `Perdant: <@${loserId}> (Elo ${loser.points}, ${loserDelta}).`
   );
   await channel.send('Ce salon sera supprimé dans 30 secondes.');
 
@@ -795,7 +804,9 @@ client.on('messageCreate', async (message) => {
         return `${idx + 1}. ${formatUserLine(userId, stats)}`;
       }
       const name = stats.username || userId;
-      return `${idx + 1}. ${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L)`;
+      const total = (stats.wins || 0) + (stats.losses || 0);
+      const wr = total > 0 ? Math.round((stats.wins / total) * 100) : 0;
+      return `${idx + 1}. ${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L, ${wr}%)`;
     });
     let top1AvatarUrl = null;
     try {
@@ -821,8 +832,11 @@ client.on('messageCreate', async (message) => {
     const user = getUser(message.author.id);
     const name = user.username || message.author.username;
     const camp = message.guild.id === MAIN_GUILD_ID ? ` [${formatSinLabel(user.camp)}]` : '';
+    const total = (user.wins || 0) + (user.losses || 0);
+    const wr = total > 0 ? Math.round((user.wins / total) * 100) : 0;
     await message.channel.send(
-      `**${name}**${camp} — Rang global: **#${rank}** sur **${sorted.length}** joueurs (${user.points} pts).`
+      `**${name}**${camp} — Rang global: **#${rank}** sur **${sorted.length}** joueurs ` +
+      `(${user.points} pts, ${user.wins}W/${user.losses}L, ${wr}%).`
     );
     return;
   }
@@ -842,8 +856,11 @@ client.on('messageCreate', async (message) => {
     const user = getUser(message.author.id);
     const name = user.username || message.author.username;
     const local = getGuildUser(message.guild.id, message.author.id);
+    const total = (local.wins || 0) + (local.losses || 0);
+    const wr = total > 0 ? Math.round((local.wins / total) * 100) : 0;
     await message.channel.send(
-      `**${name}** — Rang serveur: **#${rank}** sur **${sorted.length}** joueurs (${local.points} pts).`
+      `**${name}** — Rang serveur: **#${rank}** sur **${sorted.length}** joueurs ` +
+      `(${local.points} pts, ${local.wins}W/${local.losses}L, ${wr}%).`
     );
     return;
   }
@@ -863,7 +880,9 @@ client.on('messageCreate', async (message) => {
 
     const lines = top.map(([userId, stats], idx) => {
       const name = data.users[userId]?.username || userId;
-      return `${idx + 1}. ${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L)`;
+      const total = (stats.wins || 0) + (stats.losses || 0);
+      const wr = total > 0 ? Math.round((stats.wins / total) * 100) : 0;
+      return `${idx + 1}. ${name} — ${stats.points} pts (${stats.wins}W/${stats.losses}L, ${wr}%)`;
     });
     let top1AvatarUrl = null;
     try {
