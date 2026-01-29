@@ -210,10 +210,23 @@ async function tryGlobalMatch() {
   const gq = getGlobalQueue();
   if (gq.length < 2) return;
 
+  // Clean queue from users already in matches
+  const open = new Set(
+    Object.values(data.matches)
+      .filter((m) => m.status === 'open')
+      .flatMap((m) => m.players)
+  );
+  const cleaned = gq.filter((id) => !open.has(id));
+  if (cleaned.length !== gq.length) {
+    data.globalQueue = cleaned;
+    saveData();
+  }
+  if (data.globalQueue.length < 2) return;
+
   // Find two users that are in the hub
   let a = null;
   let b = null;
-  for (const id of gq) {
+  for (const id of data.globalQueue) {
     const m = await hubGuild.members.fetch(id).catch(() => null);
     if (!m) continue;
     if (!a) {
@@ -229,7 +242,7 @@ async function tryGlobalMatch() {
   if (!a || !b) return;
 
   // Remove them from global queue
-  data.globalQueue = gq.filter((id) => id !== a && id !== b);
+  data.globalQueue = data.globalQueue.filter((id) => id !== a && id !== b);
   saveData();
 
   const memberA = await hubGuild.members.fetch(a);
@@ -769,6 +782,7 @@ async function finalizeCancel(channel, match) {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
@@ -778,6 +792,9 @@ const handledMessages = new Set();
 
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
+  setInterval(() => {
+    tryGlobalMatch().catch(() => {});
+  }, 15000);
 });
 
 client.on('messageCreate', async (message) => {
