@@ -204,6 +204,54 @@ function getGlobalQueue() {
   return data.globalQueue;
 }
 
+async function tryGlobalMatch() {
+  const hubGuild = await client.guilds.fetch(HUB_GUILD_ID).catch(() => null);
+  if (!hubGuild) return;
+  const gq = getGlobalQueue();
+  if (gq.length < 2) return;
+
+  // Find two users that are in the hub
+  let a = null;
+  let b = null;
+  for (const id of gq) {
+    const m = await hubGuild.members.fetch(id).catch(() => null);
+    if (!m) continue;
+    if (!a) {
+      a = id;
+      continue;
+    }
+    if (id !== a) {
+      b = id;
+      break;
+    }
+  }
+
+  if (!a || !b) return;
+
+  // Remove them from global queue
+  data.globalQueue = gq.filter((id) => id !== a && id !== b);
+  saveData();
+
+  const memberA = await hubGuild.members.fetch(a);
+  const memberB = await hubGuild.members.fetch(b);
+  const channel = await createMatchChannel(hubGuild, memberA, memberB);
+  data.matches[channel.id] = {
+    players: [a, b],
+    reports: {},
+    cancel: {},
+    status: 'open'
+  };
+  saveData();
+
+  await channel.send(`Match global trouvé : <@${a}> vs <@${b}>`);
+  await channel.send(LADDER_RULES);
+  await postBoChoiceStart(channel, data.matches[channel.id]);
+
+  const link = channel.toString();
+  try { await memberA.send(`Ton match global est prêt : ${link}`); } catch {}
+  try { await memberB.send(`Ton match global est prêt : ${link}`); } catch {}
+}
+
 function isInMatch(userId) {
   return Object.values(data.matches).some((m) => m.players.includes(userId) && m.status === 'open');
 }
@@ -1451,58 +1499,29 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      const hubGuild = await client.guilds.fetch(HUB_GUILD_ID).catch(() => null);
-      if (!hubGuild) {
-        await interaction.editReply({ content: 'Serveur hub indisponible pour le moment.' });
-        return;
-      }
-
-      const hubMember = await hubGuild.members.fetch(interaction.user.id).catch(() => null);
-      if (!hubMember) {
-        try {
-          await interaction.user.send(`Rejoins le hub pour le matchmaking global : ${HUB_INVITE_URL}`);
-        } catch {}
-        await interaction.editReply({ content: 'Tu dois rejoindre le serveur hub pour le matchmaking global. Invitation envoyée en DM.' });
-        return;
-      }
-
       const gq = getGlobalQueue();
       if (gq.includes(interaction.user.id)) {
         await interaction.editReply({ content: 'Tu es déjà dans la file globale.' });
         return;
       }
 
-      const opponentId = gq.find((id) => id !== interaction.user.id);
-      if (!opponentId) {
-        gq.push(interaction.user.id);
-        saveData();
-        await interaction.editReply({ content: 'Recherche d’un adversaire (global)...' });
-        return;
-      }
-
-      data.globalQueue = gq.filter((id) => id !== opponentId);
+      gq.push(interaction.user.id);
       saveData();
 
-      const opponentMember = await hubGuild.members.fetch(opponentId).catch(() => null);
-      if (!opponentMember) {
-        await interaction.editReply({ content: 'Adversaire non disponible sur le hub, réessaie.' });
-        return;
+      const hubGuild = await client.guilds.fetch(HUB_GUILD_ID).catch(() => null);
+      if (hubGuild) {
+        const hubMember = await hubGuild.members.fetch(interaction.user.id).catch(() => null);
+        if (!hubMember) {
+          try {
+            await interaction.user.send(`Rejoins le hub pour le matchmaking global : ${HUB_INVITE_URL}`);
+          } catch {}
+          await interaction.editReply({ content: 'Tu es en file globale. Rejoins le hub pour jouer (invitation envoyée en DM).' });
+          return;
+        }
       }
 
-      const channel = await createMatchChannel(hubGuild, hubMember, opponentMember);
-      data.matches[channel.id] = {
-        players: [interaction.user.id, opponentId],
-        reports: {},
-        cancel: {},
-        status: 'open'
-      };
-      saveData();
-
-      await channel.send(`Match global trouvé : <@${interaction.user.id}> vs <@${opponentId}>`);
-      await channel.send(LADDER_RULES);
-      await postBoChoiceStart(channel, data.matches[channel.id]);
-
-      await interaction.editReply({ content: `Match global créé dans le hub : ${channel}` });
+      await interaction.editReply({ content: 'Recherche d’un adversaire (global)...' });
+      await tryGlobalMatch();
       return;
     }
 
@@ -1839,6 +1858,14 @@ client.on('interactionCreate', async (interaction) => {
       await promptGameReport(interaction.channel, match);
       return;
     }
+  }
+});
+
+client.on('guildMemberAdd', async (member) => {
+  if (member.guild.id !== HUB_GUILD_ID) return;
+  const gq = getGlobalQueue();
+  if (gq.includes(member.id)) {
+    await tryGlobalMatch();
   }
 });
 
