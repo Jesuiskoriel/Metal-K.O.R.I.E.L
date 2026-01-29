@@ -22,6 +22,8 @@ const PLAYERS_CSV_PATH = path.join(__dirname, 'ladder_players.csv');
 const TEAMS_CSV_PATH = path.join(__dirname, 'ladder_teams.csv');
 const README_USER_PATH = path.join(__dirname, 'README_USER.md');
 const MAIN_GUILD_ID = '1199795989310091344';
+const HUB_GUILD_ID = '1466428567654240445';
+const HUB_INVITE_URL = 'https://discord.gg/EK6N7xvQxu';
 const STARTING_ELO = 1000;
 const K_BO3 = 32;
 const K_BO5 = 40;
@@ -143,7 +145,7 @@ const LADDER_RULES = [
 
 function loadData() {
   if (!fs.existsSync(DATA_PATH)) {
-    return { users: {}, guilds: {}, queues: {}, matches: {} };
+    return { users: {}, guilds: {}, queues: {}, matches: {}, globalQueue: [] };
   }
   try {
     const raw = fs.readFileSync(DATA_PATH, 'utf8');
@@ -156,10 +158,11 @@ function loadData() {
       users: data.users || {},
       guilds: data.guilds || {},
       queues,
-      matches: data.matches || {}
+      matches: data.matches || {},
+      globalQueue: Array.isArray(data.globalQueue) ? data.globalQueue : []
     };
   } catch {
-    return { users: {}, guilds: {}, queues: {}, matches: {} };
+    return { users: {}, guilds: {}, queues: {}, matches: {}, globalQueue: [] };
   }
 }
 
@@ -194,6 +197,11 @@ function getGuildUser(guildId, userId) {
 function getQueue(guildId) {
   if (!data.queues[guildId]) data.queues[guildId] = [];
   return data.queues[guildId];
+}
+
+function getGlobalQueue() {
+  if (!Array.isArray(data.globalQueue)) data.globalQueue = [];
+  return data.globalQueue;
 }
 
 function isInMatch(userId) {
@@ -387,6 +395,14 @@ function initSet(match) {
 function buildFindRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('find_match').setLabel('Trouver un match').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('leave_queue').setLabel('Quitter la file').setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function buildMatchmakingRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('find_match_local').setLabel('Matchmaking serveur').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('find_match_global').setLabel('Matchmaking global').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('leave_queue').setLabel('Quitter la file').setStyle(ButtonStyle.Secondary)
   );
 }
@@ -745,8 +761,8 @@ client.on('messageCreate', async (message) => {
     if (!isLadderChannel) return;
     if (message.guild.id !== MAIN_GUILD_ID) {
       await message.channel.send({
-        content: `Panel ladder : clique sur “Trouver un match” pour lancer une recherche.\n\n${LADDER_RULES}`,
-        components: [buildFindRow()]
+        content: `Panel ladder : choisis ton matchmaking.\n\n${LADDER_RULES}`,
+        components: [buildMatchmakingRow()]
       });
       return;
     }
@@ -759,7 +775,7 @@ client.on('messageCreate', async (message) => {
     }
     await message.channel.send({
       content: `Panel ladder : équipe **${formatSinLabel(user.camp)}** détectée.\nClique sur “Trouver un match” pour lancer une recherche.\n\n${LADDER_RULES}`,
-      components: [buildFindRow()]
+      components: [buildMatchmakingRow()]
     });
     return;
   }
@@ -1050,11 +1066,15 @@ client.on('messageCreate', async (message) => {
   if (cmd === '!leave') {
     if (!isLadderChannel) return;
     const queue = getQueue(message.guild.id);
-    if (!queue.includes(message.author.id)) {
+    const gq = getGlobalQueue();
+    const wasLocal = queue.includes(message.author.id);
+    const wasGlobal = gq.includes(message.author.id);
+    if (!wasLocal && !wasGlobal) {
       await message.channel.send('Tu n’es pas dans la file.');
       return;
     }
     data.queues[message.guild.id] = queue.filter((id) => id !== message.author.id);
+    data.globalQueue = gq.filter((id) => id !== message.author.id);
     saveData();
     await message.channel.send('Tu as quitté la file.');
     return;
@@ -1356,7 +1376,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isButton()) {
-    if (interaction.customId === 'find_match') {
+    if (interaction.customId === 'find_match_local') {
       await interaction.deferReply({ ephemeral: true });
       if (!isLadderChannel) {
         await interaction.editReply({ content: 'Utilise ça dans le salon ladder.' });
@@ -1384,7 +1404,7 @@ client.on('interactionCreate', async (interaction) => {
       if (!opponentId) {
         queue.push(interaction.user.id);
         saveData();
-        await interaction.editReply({ content: 'Recherche d’un adversaire...' });
+        await interaction.editReply({ content: 'Recherche d’un adversaire (serveur)...' });
         return;
       }
 
@@ -1412,17 +1432,98 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    if (interaction.customId === 'find_match_global') {
+      await interaction.deferReply({ ephemeral: true });
+      if (!isLadderChannel) {
+        await interaction.editReply({ content: 'Utilise ça dans le salon ladder.' });
+        return;
+      }
+      const user = getUser(interaction.user.id);
+      user.username = interaction.user.username;
+      getGuildUser(interaction.guild.id, interaction.user.id);
+      saveData();
+      if (interaction.guild.id === MAIN_GUILD_ID && !user.camp) {
+        await interaction.editReply({ content: 'Choisis d’abord une équipe avec `!team` ou le menu.' });
+        return;
+      }
+      if (isInMatch(interaction.user.id)) {
+        await interaction.editReply({ content: 'Tu es déjà dans un match.' });
+        return;
+      }
+
+      const hubGuild = await client.guilds.fetch(HUB_GUILD_ID).catch(() => null);
+      if (!hubGuild) {
+        await interaction.editReply({ content: 'Serveur hub indisponible pour le moment.' });
+        return;
+      }
+
+      const hubMember = await hubGuild.members.fetch(interaction.user.id).catch(() => null);
+      if (!hubMember) {
+        try {
+          await interaction.user.send(`Rejoins le hub pour le matchmaking global : ${HUB_INVITE_URL}`);
+        } catch {}
+        await interaction.editReply({ content: 'Tu dois rejoindre le serveur hub pour le matchmaking global. Invitation envoyée en DM.' });
+        return;
+      }
+
+      const gq = getGlobalQueue();
+      if (gq.includes(interaction.user.id)) {
+        await interaction.editReply({ content: 'Tu es déjà dans la file globale.' });
+        return;
+      }
+
+      const opponentId = gq.find((id) => id !== interaction.user.id);
+      if (!opponentId) {
+        gq.push(interaction.user.id);
+        saveData();
+        await interaction.editReply({ content: 'Recherche d’un adversaire (global)...' });
+        return;
+      }
+
+      data.globalQueue = gq.filter((id) => id !== opponentId);
+      saveData();
+
+      const opponentMember = await hubGuild.members.fetch(opponentId).catch(() => null);
+      if (!opponentMember) {
+        await interaction.editReply({ content: 'Adversaire non disponible sur le hub, réessaie.' });
+        return;
+      }
+
+      const channel = await createMatchChannel(hubGuild, hubMember, opponentMember);
+      data.matches[channel.id] = {
+        players: [interaction.user.id, opponentId],
+        reports: {},
+        cancel: {},
+        status: 'open'
+      };
+      saveData();
+
+      await channel.send(`Match global trouvé : <@${interaction.user.id}> vs <@${opponentId}>`);
+      await channel.send(LADDER_RULES);
+      await postBoChoiceStart(channel, data.matches[channel.id]);
+
+      await interaction.editReply({ content: `Match global créé dans le hub : ${channel}` });
+      return;
+    }
+
+    if (interaction.customId === 'find_match') {
+      await interaction.reply({ content: 'Utilise les nouveaux boutons du panneau !ladder.', ephemeral: true });
+      return;
+    }
+
     if (interaction.customId === 'leave_queue') {
       if (!isLadderChannel) {
         await interaction.reply({ content: 'Utilise ça dans le salon ladder.', ephemeral: true });
         return;
       }
       const queue = getQueue(interaction.guild.id);
-      if (!queue.includes(interaction.user.id)) {
+      const gq = getGlobalQueue();
+      if (!queue.includes(interaction.user.id) && !gq.includes(interaction.user.id)) {
         await interaction.reply({ content: 'Tu n’es pas dans la file.', ephemeral: true });
         return;
       }
       data.queues[interaction.guild.id] = queue.filter((id) => id !== interaction.user.id);
+      data.globalQueue = gq.filter((id) => id !== interaction.user.id);
       saveData();
       await interaction.reply({ content: 'Tu as quitté la file.', ephemeral: true });
     }
