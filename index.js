@@ -204,6 +204,26 @@ function getGlobalQueue() {
   return data.globalQueue;
 }
 
+async function getTeamLabelIfInMain(userId) {
+  const user = data.users[userId];
+  if (!user || !user.camp) return null;
+  const mainGuild = await client.guilds.fetch(MAIN_GUILD_ID).catch(() => null);
+  if (!mainGuild) return null;
+  const member = await mainGuild.members.fetch(userId).catch(() => null);
+  if (!member) return null;
+  return formatSinLabel(user.camp);
+}
+
+async function buildMatchLine(aId, bId, labelPrefix = 'Match') {
+  const aTeam = await getTeamLabelIfInMain(aId);
+  const bTeam = await getTeamLabelIfInMain(bId);
+  const aName = data.users[aId]?.username || aId;
+  const bName = data.users[bId]?.username || bId;
+  const aSuffix = aTeam ? ` [${aTeam}]` : '';
+  const bSuffix = bTeam ? ` [${bTeam}]` : '';
+  return `${labelPrefix} trouvé : <@${aId}> (${aName})${aSuffix} vs <@${bId}> (${bName})${bSuffix}`;
+}
+
 async function tryGlobalMatch() {
   const hubGuild = await client.guilds.fetch(HUB_GUILD_ID).catch(() => null);
   if (!hubGuild) return;
@@ -256,7 +276,7 @@ async function tryGlobalMatch() {
   };
   saveData();
 
-  await channel.send(`Match global trouvé : <@${a}> vs <@${b}>`);
+  await channel.send(await buildMatchLine(a, b, 'Match global'));
   await channel.send(LADDER_RULES);
   await postBoChoiceStart(channel, data.matches[channel.id]);
 
@@ -826,7 +846,11 @@ client.on('messageCreate', async (message) => {
     if (!isLadderChannel) return;
     if (message.guild.id !== MAIN_GUILD_ID) {
       await message.channel.send({
-        content: `Panel ladder : choisis ton matchmaking.\n\n${LADDER_RULES}`,
+        content:
+          `Panel ladder : choisis ton matchmaking.\n` +
+          `- **Matchmaking serveur** : match local sur ce serveur\n` +
+          `- **Matchmaking global** : match dans le serveur hub (DM avec le lien)\n\n` +
+          `${LADDER_RULES}`,
         components: [buildMatchmakingRow()]
       });
       return;
@@ -839,7 +863,11 @@ client.on('messageCreate', async (message) => {
       return;
     }
     await message.channel.send({
-      content: `Panel ladder : équipe **${formatSinLabel(user.camp)}** détectée.\nClique sur “Trouver un match” pour lancer une recherche.\n\n${LADDER_RULES}`,
+      content:
+        `Panel ladder : équipe **${formatSinLabel(user.camp)}** détectée.\n` +
+        `- **Matchmaking serveur** : match local sur ce serveur\n` +
+        `- **Matchmaking global** : match dans le serveur hub (DM avec le lien)\n\n` +
+        `${LADDER_RULES}`,
       components: [buildMatchmakingRow()]
     });
     return;
@@ -1120,7 +1148,7 @@ client.on('messageCreate', async (message) => {
     };
     saveData();
 
-    await channel.send(`Match trouvé : <@${message.author.id}> vs <@${opponentId}>`);
+    await channel.send(await buildMatchLine(message.author.id, opponentId, 'Match'));
     await channel.send(LADDER_RULES);
     await postBoChoiceStart(channel, data.matches[channel.id]);
 
@@ -1487,9 +1515,7 @@ client.on('interactionCreate', async (interaction) => {
       };
       saveData();
 
-      await channel.send(
-        `Match trouvé : <@${interaction.user.id}> vs <@${opponentId}>`
-      );
+      await channel.send(await buildMatchLine(interaction.user.id, opponentId, 'Match'));
       await channel.send(LADDER_RULES);
       await postBoChoiceStart(channel, data.matches[channel.id]);
 

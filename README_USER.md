@@ -28,7 +28,9 @@ Pride, Greed, Lust, Envy, Gluttony, Wrath, Sloth
 ━━━━━━━━━━━━━━━━━━━━
 
 1) Fais `!team <nom>` (une seule fois).  
-2) Fais `!ladder` puis clique **Trouver un match**.  
+2) Fais `!ladder` puis choisis :  
+   - **Matchmaking serveur** → match local sur ce serveur  
+   - **Matchmaking global** → match dans le serveur hub (tu reçois un DM avec le lien)  
 3) Je crée un salon privé pour votre match.
 
 ━━━━━━━━━━━━━━━━━━━━
