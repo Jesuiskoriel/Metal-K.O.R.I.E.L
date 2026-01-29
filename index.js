@@ -45,6 +45,8 @@ const LADDER_RULES = [
   `- K-factor : BO3 = ${K_BO3}, BO5 = ${K_BO5}.`,
   `- Stages : ${STAGES.join(', ')}.`,
   `- RPS : gagnant ban 3 → perdant ban 4 → gagnant choisit entre 2.`,
+  `- Chaque game est reportée (les 2 joueurs doivent confirmer).`,
+  `- Entre les games : perdant ban 4 → gagnant pick direct.`,
   `- Gentleman : accord des 2 joueurs pour choisir un stage direct (sans bans).`,
   `- Random map : disponible au moment du pick.`,
   `- Annulation : les 2 joueurs doivent valider.`
@@ -264,6 +266,24 @@ function applyElo(winner, loser, bo) {
   loser.points = Math.round(loser.points + k * upsetFactor * (0 - expectedLoser));
 }
 
+function getRequiredWins(bo) {
+  return bo === 'bo5' ? 3 : 2;
+}
+
+function initSet(match) {
+  if (match.set) return;
+  const [a, b] = match.players;
+  match.set = {
+    bo: match.bo || 'bo3',
+    game: 1,
+    wins: { [a]: 0, [b]: 0 },
+    requiredWins: getRequiredWins(match.bo || 'bo3'),
+    reports: {},
+    reportPromptedFor: 0
+  };
+  saveData();
+}
+
 function buildFindRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('find_match').setLabel('Trouver un match').setStyle(ButtonStyle.Success),
@@ -288,6 +308,18 @@ function buildReportMenu(playerA, playerB) {
   );
 
   return { reportRow, cancelRow };
+}
+
+function buildGameReportMenu(playerA, playerB, gameNum) {
+  const reportSelect = new StringSelectMenuBuilder()
+    .setCustomId('game_report')
+    .setPlaceholder(`Gagnant de la game ${gameNum}`)
+    .addOptions([
+      { label: `Gagnant: ${playerA.username}`, value: playerA.id },
+      { label: `Gagnant: ${playerB.username}`, value: playerB.id }
+    ]);
+
+  return new ActionRowBuilder().addComponents(reportSelect);
 }
 
 async function postReportControls(channel, match) {
@@ -418,6 +450,20 @@ async function promptWinnerChoose(channel, match, playerId) {
   });
 }
 
+async function promptWinnerPickPostgame(channel, match, playerId) {
+  match.stageState.stageIdMap = {};
+  match.stageState.remaining.forEach((s) => {
+    match.stageState.stageIdMap[encodeStageId(s)] = s;
+  });
+  saveData();
+  const rows = buildStageButtons(match.stageState.remaining, 'winner_pick');
+  const randomRow = match.stageState.remaining.length === 2 ? buildRandomRow('random_pick') : null;
+  await channel.send({
+    content: `<@${playerId}> choisis le stage pour la prochaine game.`,
+    components: randomRow ? [...rows, randomRow] : rows
+  });
+}
+
 async function promptPick(channel, match, playerId) {
   match.stageState.stageIdMap = {};
   match.stageState.remaining.forEach((s) => {
@@ -452,6 +498,21 @@ async function promptGentlemanPick(channel, match) {
     content: `Gentleman activé : <@${match.players[0]}> <@${match.players[1]}> choisissez directement le stage (sans bans).`,
     components: randomRow ? [...rows, randomRow] : rows
   });
+}
+
+async function promptGameReport(channel, match) {
+  initSet(match);
+  if (match.set.reportPromptedFor === match.set.game) return;
+  const [a, b] = match.players;
+  const memberA = await channel.guild.members.fetch(a);
+  const memberB = await channel.guild.members.fetch(b);
+  const row = buildGameReportMenu(memberA.user, memberB.user, match.set.game);
+  await channel.send({
+    content: `Reportez le gagnant de la **game ${match.set.game}** (les 2 joueurs doivent confirmer).`,
+    components: [row]
+  });
+  match.set.reportPromptedFor = match.set.game;
+  saveData();
 }
 
 async function finalizeMatch(channel, match, winnerId, bo) {
@@ -841,6 +902,7 @@ client.on('messageCreate', async (message) => {
       }
       match.bo = match.gentlemanBoVotes[a];
       saveData();
+      initSet(match);
       await message.channel.send(`Gentleman accepté : format **${match.bo.toUpperCase()}**.`);
       await postReportControls(message.channel, match);
       await promptGentlemanPick(message.channel, match);
@@ -870,6 +932,10 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.customId === 'report_select') {
       if (!isMatchChannel) return;
+      if (match.status !== 'open') {
+        await interaction.reply({ content: 'Ce match est déjà terminé.', ephemeral: true });
+        return;
+      }
       if (!match.players.includes(interaction.user.id)) {
         await interaction.reply({ content: 'Seuls les joueurs du match peuvent reporter.', ephemeral: true });
         return;
@@ -896,6 +962,74 @@ client.on('interactionCreate', async (interaction) => {
 
       await finalizeMatch(interaction.channel, match, r1.winnerId, r1.bo);
       await interaction.reply({ content: 'Résultat enregistré.', ephemeral: true });
+      return;
+    }
+
+    if (interaction.customId === 'game_report') {
+      if (!isMatchChannel) return;
+      if (match.status !== 'open') {
+        await interaction.reply({ content: 'Ce match est déjà terminé.', ephemeral: true });
+        return;
+      }
+      if (!match.players.includes(interaction.user.id)) {
+        await interaction.reply({ content: 'Seuls les joueurs du match peuvent reporter.', ephemeral: true });
+        return;
+      }
+      initSet(match);
+      const winnerId = interaction.values[0];
+      if (!match.players.includes(winnerId)) {
+        await interaction.reply({ content: 'Le gagnant doit être un des deux joueurs.', ephemeral: true });
+        return;
+      }
+      match.set.reports[interaction.user.id] = winnerId;
+      saveData();
+
+      const reports = Object.values(match.set.reports);
+      if (reports.length < 2) {
+        await interaction.reply({ content: 'Report reçu. En attente de l’autre joueur.', ephemeral: true });
+        return;
+      }
+      const [r1, r2] = reports;
+      if (r1 !== r2) {
+        match.set.reports = {};
+        saveData();
+        await interaction.reply({ content: 'Les reports ne correspondent pas. Merci de re‑reporter.', ephemeral: true });
+        return;
+      }
+
+      const loserId = match.players.find((id) => id !== r1);
+      match.set.wins[r1] = (match.set.wins[r1] || 0) + 1;
+      match.set.game += 1;
+      match.set.reports = {};
+      saveData();
+
+      await interaction.channel.send(
+        `Game gagnée par <@${r1}>. Score: <@${match.players[0]}> ${match.set.wins[match.players[0]]} - ${match.set.wins[match.players[1]]} <@${match.players[1]}>.`
+      );
+
+      if (match.set.wins[r1] >= match.set.requiredWins) {
+        await finalizeMatch(interaction.channel, match, r1, match.set.bo);
+        await interaction.reply({ content: 'Set terminé.', ephemeral: true });
+        return;
+      }
+
+      match.stageState = {
+        phase: 'postgame_ban4',
+        rpsWinner: r1,
+        rpsLoser: loserId,
+        remaining: [...STAGES],
+        banNeed: 0,
+        banSelected: [],
+        stageIdMap: {},
+        pickWinner: r1,
+        banPlayer: loserId
+      };
+      saveData();
+      await interaction.channel.send(
+        `Nouvelle game : <@${loserId}> ban 4 stages, puis <@${r1}> choisit le stage.`
+      );
+      await promptBan(interaction.channel, match, loserId, 4);
+      await interaction.reply({ content: 'Prochaine game lancée.', ephemeral: true });
       return;
     }
 
@@ -1012,6 +1146,7 @@ client.on('interactionCreate', async (interaction) => {
       const [a, b] = match.players;
       if (match.gentlemanVotes[a] && match.gentlemanVotes[b]) {
         await interaction.channel.send('Gentleman accepté : pas de bans, choix direct du stage.');
+        initSet(match);
         await postReportControls(interaction.channel, match);
         await promptGentlemanPick(interaction.channel, match);
         await interaction.reply({ content: 'Gentleman confirmé.', ephemeral: true });
@@ -1054,6 +1189,7 @@ client.on('interactionCreate', async (interaction) => {
         }
         match.bo = match.boVotes[a];
         saveData();
+        initSet(match);
         await interaction.channel.send(`Format choisi : **${match.bo.toUpperCase()}**.`);
         await postReportControls(interaction.channel, match);
         if (!match.stageState || match.stageState.phase === 'rps') {
@@ -1125,11 +1261,15 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
       const phase = match.stageState.phase;
-      if (phase !== 'ban3' && phase !== 'loser_ban4') {
+      if (phase !== 'ban3' && phase !== 'loser_ban4' && phase !== 'postgame_ban4') {
         await interaction.reply({ content: 'Phase de ban invalide.', ephemeral: true });
         return;
       }
-      const expected = phase === 'ban3' ? match.stageState.rpsWinner : match.stageState.rpsLoser;
+      const expected = phase === 'ban3'
+        ? match.stageState.rpsWinner
+        : phase === 'loser_ban4'
+          ? match.stageState.rpsLoser
+          : match.stageState.banPlayer;
       if (interaction.user.id !== expected) {
         await interaction.reply({ content: 'Ce n’est pas ton tour de ban.', ephemeral: true });
         return;
@@ -1162,9 +1302,15 @@ client.on('interactionCreate', async (interaction) => {
         await promptBan(interaction.channel, match, match.stageState.rpsLoser, 4);
         return;
       }
-      match.stageState.phase = 'winner_choose';
+      if (phase === 'loser_ban4') {
+        match.stageState.phase = 'winner_choose';
+        saveData();
+        await promptWinnerChoose(interaction.channel, match, match.stageState.rpsWinner);
+        return;
+      }
+      match.stageState.phase = 'postgame_pick';
       saveData();
-      await promptWinnerChoose(interaction.channel, match, match.stageState.rpsWinner);
+      await promptWinnerPickPostgame(interaction.channel, match, match.stageState.pickWinner);
       return;
     }
 
@@ -1195,16 +1341,20 @@ client.on('interactionCreate', async (interaction) => {
       saveData();
       await interaction.update({ content: 'Stage choisi.', components: [] });
       await interaction.channel.send(`Stage sélectionné (gentleman) : **${stage}**. Bonne chance !`);
+      await promptGameReport(interaction.channel, match);
       return;
     }
 
     if (interaction.customId.startsWith('winner_pick:')) {
       if (!isMatchChannel) return;
-      if (!match.stageState || match.stageState.phase !== 'winner_choose') {
+      if (!match.stageState || (match.stageState.phase !== 'winner_choose' && match.stageState.phase !== 'postgame_pick')) {
         await interaction.reply({ content: 'Le choix final n’est pas actif.', ephemeral: true });
         return;
       }
-      if (interaction.user.id !== match.stageState.rpsWinner) {
+      const picker = match.stageState.phase === 'winner_choose'
+        ? match.stageState.rpsWinner
+        : match.stageState.pickWinner;
+      if (interaction.user.id !== picker) {
         await interaction.reply({ content: 'Ce n’est pas ton tour de choisir.', ephemeral: true });
         return;
       }
@@ -1219,16 +1369,20 @@ client.on('interactionCreate', async (interaction) => {
       saveData();
       await interaction.update({ content: 'Stage choisi.', components: [] });
       await interaction.channel.send(`Stage sélectionné : **${stage}**. Bonne chance !`);
+      await promptGameReport(interaction.channel, match);
       return;
     }
 
     if (interaction.customId === 'random_pick') {
       if (!isMatchChannel) return;
-      if (!match.stageState || match.stageState.phase !== 'winner_choose') {
+      if (!match.stageState || (match.stageState.phase !== 'winner_choose' && match.stageState.phase !== 'postgame_pick')) {
         await interaction.reply({ content: 'Le pick de stage n’est pas actif.', ephemeral: true });
         return;
       }
-      if (interaction.user.id !== match.stageState.rpsWinner) {
+      const picker = match.stageState.phase === 'winner_choose'
+        ? match.stageState.rpsWinner
+        : match.stageState.pickWinner;
+      if (interaction.user.id !== picker) {
         await interaction.reply({ content: 'Ce n’est pas ton tour de pick.', ephemeral: true });
         return;
       }
@@ -1239,6 +1393,7 @@ client.on('interactionCreate', async (interaction) => {
       saveData();
       await interaction.update({ content: 'Stage choisi (random).', components: [] });
       await interaction.channel.send(`Stage sélectionné : **${stage}**. Bonne chance !`);
+      await promptGameReport(interaction.channel, match);
       return;
     }
 
@@ -1259,6 +1414,7 @@ client.on('interactionCreate', async (interaction) => {
       saveData();
       await interaction.update({ content: 'Stage choisi (random).', components: [] });
       await interaction.channel.send(`Stage sélectionné (gentleman) : **${stage}**. Bonne chance !`);
+      await promptGameReport(interaction.channel, match);
       return;
     }
   }
