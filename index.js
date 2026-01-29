@@ -119,7 +119,11 @@ const FIGHTERS = [
   'Terry',
   'Byleth',
   'Min Min',
-  'Steve'
+  'Steve',
+  'Sephiroth',
+  'Pyra/Mythra',
+  'Kazuya',
+  'Sora'
 ];
 
 const LADDER_RULES = [
