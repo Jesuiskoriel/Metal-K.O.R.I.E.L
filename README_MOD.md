@@ -5,6 +5,7 @@ Ce guide est pour les modérateurs et admins.
 ## Commandes modo/admin
 
 - `!killall` : stoppe tous les matchs et supprime les salons en cours (admin)
+- `!killmatch` : stoppe le match du salon courant (admin)
 - `!forcewin @joueur bo3|bo5` : force la victoire d’un joueur (modo)
 
 ## Classements

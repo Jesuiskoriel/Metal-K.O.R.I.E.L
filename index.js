@@ -945,6 +945,21 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
+  if (cmd === '!killmatch') {
+    if (!isMatchChannel) return;
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      await message.channel.send('Commande réservée aux admins.');
+      return;
+    }
+    delete data.matches[message.channel.id];
+    saveData();
+    await message.channel.send('Match stoppé. Ce salon sera supprimé dans 5 secondes.');
+    setTimeout(() => {
+      message.channel.delete().catch(() => {});
+    }, 5000);
+    return;
+  }
+
   if (cmd === '!ranking') {
     if (!isLadderChannel) return;
     const entries = Object.entries(data.users);
