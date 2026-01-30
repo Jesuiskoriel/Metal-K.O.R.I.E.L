@@ -25,6 +25,7 @@ const MAIN_GUILD_ID = '1199795989310091344';
 const HUB_GUILD_ID = '1466428567654240445';
 const HUB_INVITE_URL = 'https://discord.gg/EK6N7xvQxu';
 const UPDATE_CHANNEL_ID = '1466751562906075136';
+const POE_CHANNEL_ID = '1248969698289389611';
 const STARTING_ELO = 1000;
 const K_BO3 = 32;
 const K_BO5 = 40;
@@ -1012,6 +1013,26 @@ client.on('messageCreate', async (message) => {
     }
     await channel.send({ content: text, allowedMentions: { parse: [] } });
     await message.channel.send('Update postée.');
+    return;
+  }
+
+  if (cmd === '!poe') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      await message.channel.send('Commande réservée aux admins.');
+      return;
+    }
+    const text = args.join(' ').trim();
+    if (!text) {
+      await message.channel.send('Usage : `!poe <message>`');
+      return;
+    }
+    const channel = await client.channels.fetch(POE_CHANNEL_ID).catch(() => null);
+    if (!channel || !channel.isTextBased()) {
+      await message.channel.send('Salon poe introuvable.');
+      return;
+    }
+    await channel.send({ content: text, allowedMentions: { parse: [] } });
+    await message.channel.send('Message posté.');
     return;
   }
 
