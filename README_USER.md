@@ -12,12 +12,16 @@ Ce guide est pour les joueurs
 ━━━━━━━━━━━━━━━━━━━━
 
 • `!ladder` → panneau avec **Matchmaking serveur** / **global**  
-• `!ranking` → top 10 global (avatar du #1)  
+• `!ranking` → top 10 global  
 • `!servranking` → top 10 du serveur  
 • `!pr` / `!personalrank` → ton rang global  
 • `!lr` / `!localrank` → ton rang serveur  
 • `!leave` → quitter la file (local ou globale)  
 • `!gentleman bo3` / `!gentleman bo5` → proposer un gentleman (accord des 2 joueurs)  
+• `!team` → menu pour choisir ton équipe (serveur principal uniquement)  
+• `!stats @joueur` → voir ses stats (points, winrate, top persos, historique)  
+• `!char <nom>` → sélectionner un perso via recherche rapide  
+
 
 
 ━━━━━━━━━━━━━━━━━━━━

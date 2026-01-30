@@ -24,6 +24,7 @@ const README_USER_PATH = path.join(__dirname, 'README_USER.md');
 const MAIN_GUILD_ID = '1199795989310091344';
 const HUB_GUILD_ID = '1466428567654240445';
 const HUB_INVITE_URL = 'https://discord.gg/EK6N7xvQxu';
+const UPDATE_CHANNEL_ID = '1466751562906075136';
 const STARTING_ELO = 1000;
 const K_BO3 = 32;
 const K_BO5 = 40;
@@ -176,11 +177,13 @@ let data = loadData();
 
 function getUser(userId) {
   if (!data.users[userId]) {
-    data.users[userId] = { camp: null, points: STARTING_ELO, wins: 0, losses: 0 };
+    data.users[userId] = { camp: null, points: STARTING_ELO, wins: 0, losses: 0, history: [], charStats: {} };
   }
   if (typeof data.users[userId].points !== 'number') {
     data.users[userId].points = STARTING_ELO;
   }
+  if (!Array.isArray(data.users[userId].history)) data.users[userId].history = [];
+  if (!data.users[userId].charStats) data.users[userId].charStats = {};
   return data.users[userId];
 }
 
@@ -389,6 +392,35 @@ function buildTopEmbed(title, lines, top1AvatarUrl) {
     .setColor(0xe74c3c);
   if (top1AvatarUrl) embed.setThumbnail(top1AvatarUrl);
   return embed;
+}
+
+function recordMatchHistory(winnerId, loserId, bo, scoreA, scoreB) {
+  const winner = getUser(winnerId);
+  const loser = getUser(loserId);
+  const entryWin = {
+    result: 'W',
+    opponent: data.users[loserId]?.username || loserId,
+    bo,
+    score: `${scoreA}-${scoreB}`,
+    at: new Date().toISOString()
+  };
+  const entryLoss = {
+    result: 'L',
+    opponent: data.users[winnerId]?.username || winnerId,
+    bo,
+    score: `${scoreB}-${scoreA}`,
+    at: new Date().toISOString()
+  };
+  winner.history.unshift(entryWin);
+  loser.history.unshift(entryLoss);
+  winner.history = winner.history.slice(0, 10);
+  loser.history = loser.history.slice(0, 10);
+}
+
+function addCharStat(userId, character) {
+  const user = getUser(userId);
+  if (!user.charStats) user.charStats = {};
+  user.charStats[character] = (user.charStats[character] || 0) + 1;
 }
 
 function csvEscape(value) {
@@ -827,6 +859,9 @@ async function finalizeMatch(channel, match, winnerId, bo) {
 
   const winnerDelta = winner.points - winnerBefore;
   const loserDelta = loser.points - loserBefore;
+  const scoreA = match.set?.wins?.[winnerId] ?? 0;
+  const scoreB = match.set?.wins?.[loserId] ?? 0;
+  recordMatchHistory(winnerId, loserId, bo, scoreA, scoreB);
   await channel.send(
     `Résultat confirmé (${bo}). Gagnant: <@${winnerId}> (Elo ${winner.points}, ${winnerDelta >= 0 ? '+' : ''}${winnerDelta}). ` +
     `Perdant: <@${loserId}> (Elo ${loser.points}, ${loserDelta}).`
@@ -960,6 +995,26 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
+  if (cmd === '!update') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      await message.channel.send('Commande réservée aux admins.');
+      return;
+    }
+    const text = args.join(' ').trim();
+    if (!text) {
+      await message.channel.send('Usage : `!update <message>`');
+      return;
+    }
+    const channel = await client.channels.fetch(UPDATE_CHANNEL_ID).catch(() => null);
+    if (!channel || !channel.isTextBased()) {
+      await message.channel.send('Salon update introuvable.');
+      return;
+    }
+    await channel.send({ content: text, allowedMentions: { parse: [] } });
+    await message.channel.send('Update postée.');
+    return;
+  }
+
   if (cmd === '!ranking') {
     if (!isLadderChannel) return;
     const entries = Object.entries(data.users);
@@ -1067,6 +1122,35 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
+  if (cmd === '!stats') {
+    if (!isLadderChannel) return;
+    const target = message.mentions.users.first() || message.author;
+    const stats = getUser(target.id);
+    const total = (stats.wins || 0) + (stats.losses || 0);
+    const wr = total > 0 ? Math.round((stats.wins / total) * 100) : 0;
+    const topChars = Object.entries(stats.charStats || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name, count]) => `${name} (${count})`);
+    const history = (stats.history || [])
+      .slice(0, 5)
+      .map((h) => `${h.result} vs ${h.opponent} (${h.score}, ${h.bo})`);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`Stats de ${target.username}`)
+      .setColor(0x3498db)
+      .setThumbnail(target.displayAvatarURL({ size: 128 }))
+      .addFields(
+        { name: 'Points', value: `${stats.points}`, inline: true },
+        { name: 'W/L', value: `${stats.wins}W/${stats.losses}L`, inline: true },
+        { name: 'Winrate', value: `${wr}%`, inline: true },
+        { name: 'Top 3 persos', value: topChars.length ? topChars.join('\n') : 'Aucun', inline: false },
+        { name: 'Historique (5 derniers)', value: history.length ? history.join('\n') : 'Aucun', inline: false }
+      );
+    await message.channel.send({ embeds: [embed] });
+    return;
+  }
+
   if (cmd === '!team' || cmd === '!camp') {
     if (!isLadderChannel) return;
     if (message.guild.id !== MAIN_GUILD_ID) {
@@ -1138,6 +1222,9 @@ client.on('messageCreate', async (message) => {
       await message.channel.send(
         `Personnages confirmés : <@${a}> **${match.charSelect.selections[a]}** / <@${b}> **${match.charSelect.selections[b]}**`
       );
+      addCharStat(a, match.charSelect.selections[a]);
+      addCharStat(b, match.charSelect.selections[b]);
+      saveData();
       const pending = match.charSelect.pending;
       const payload = match.charSelect.payload || {};
       match.charSelect = null;
@@ -1443,6 +1530,9 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.channel.send(
           `Personnages confirmés : <@${a}> **${match.charSelect.selections[a]}** / <@${b}> **${match.charSelect.selections[b]}**`
         );
+        addCharStat(a, match.charSelect.selections[a]);
+        addCharStat(b, match.charSelect.selections[b]);
+        saveData();
         const pending = match.charSelect.pending;
         const payload = match.charSelect.payload || {};
         match.charSelect = null;
