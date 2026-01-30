@@ -1124,7 +1124,21 @@ client.on('messageCreate', async (message) => {
 
   if (cmd === '!stats') {
     if (!isLadderChannel) return;
-    const target = message.mentions.users.first() || message.author;
+    let target = message.mentions.users.first() || null;
+    if (!target && args.length > 0) {
+      const raw = args[0].replace(/[<@!>]/g, '');
+      if (/^\d+$/.test(raw)) {
+        target = await client.users.fetch(raw).catch(() => null);
+      } else if (message.guild) {
+        const query = args.join(' ').trim();
+        const found = await message.guild.members.fetch({ query, limit: 1 }).catch(() => null);
+        target = found && found.size > 0 ? found.first().user : null;
+      }
+    }
+    if (!target) {
+      await message.channel.send('Usage : `!stats @joueur` ou `!stats <id>`.');
+      return;
+    }
     const stats = getUser(target.id);
     const total = (stats.wins || 0) + (stats.losses || 0);
     const wr = total > 0 ? Math.round((stats.wins / total) * 100) : 0;
